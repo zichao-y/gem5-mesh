@@ -19,6 +19,7 @@ endif
 # Overridable arguments to the simulation command for `make run`.
 GEM5_ARGS ?= --remote-gdb-port=0
 HB_ARGS ?= --options=""
+CONFIG_ARGS ?=  
 
 # unique binary id to differentiate
 BINARY_NAME ?= $(BENCHNAME) 
@@ -44,6 +45,16 @@ COMMON_OBJS := $(notdir $(COMMON_SRCS:.c=.o))
 $(BENCHNAME) : $(TRILLIASM_OBJS) $(C_DEPS_NOKERN) $(COMMON_OBJS)
 	$(RV_CC) $(TRILLIASM_OBJS) $(C_DEPS_NOKERN) $(COMMON_OBJS) $(CFLAGS) -o $(BINARY_NAME)
 
+run_simple: $(BENCHNAME)
+	$(BASE_DIR)/build/RVSP/gem5.opt \
+		$(DEBUG_FLAGS) \
+		$(GEM5_ARGS) \
+		$(BASE_DIR)/configs/phil/simple.py \
+		--cmd=$(BENCHNAME) \
+		$(HB_ARGS) \
+		
+		
+
 run: $(BENCHNAME)
 	$(BASE_DIR)/build/RVSP/gem5.opt \
 		$(DEBUG_FLAGS) \
@@ -52,7 +63,8 @@ run: $(BENCHNAME)
 		--cmd=$(BENCHNAME) \
 		$(HB_ARGS) \
 		--num-cpus=$(N_SPS) \
-		--vector
+		--vector \
+		$(CONFIG_ARGS)		
 
 $(C_DEPS_NOKERN): %.o: %.c
 	$(RV_CC) $(CFLAGS) -c $^ -o $@

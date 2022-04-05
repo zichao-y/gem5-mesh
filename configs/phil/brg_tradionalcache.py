@@ -560,7 +560,7 @@ n_icaches = n_cpus
 icache_cntrls = []
 sequencers = []
 for i in xrange(n_icaches):
-  icache = RubyCache(size = '4MB', assoc = 2)
+  icache = RubyCache(size = '4kB', assoc = 2)
   icache_cntrl = L1Cache_Controller(version = i,
                                     L1cache = icache,
                                     transitions_per_cycle = options.ports,
