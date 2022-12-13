@@ -2,7 +2,7 @@
 #include "spad.h"
 
 // 4 kB
-#define SP_SIZE 4096
+#define SP_SIZE 65536
 #define N_SPS _N_SPS
 
 #if !defined(__x86_64__) && !defined(__i386__)

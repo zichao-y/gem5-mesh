@@ -43,6 +43,7 @@
 #include "mem/ruby/common/DataBlock.hh"
 #include "mem/ruby/common/TypeDefines.hh"
 #include "mem/ruby/common/WriteMask.hh"
+#include "debug/Addrbug.hh"
 
 inline Cycles zero_time() { return Cycles(0); }
 
@@ -60,18 +61,28 @@ IDToInt(NodeID id)
     return nodenum;
 }
 
-inline int
+inline uint64_t
 addressToInt(Addr addr)
 {
+    DPRINTF(Addrbug, "Addr to Int with input addr: %#x\n", addr);
+    //assert(!(addr & 0xffffffff00000000));
+    return addr;
+}
+
+inline Addr
+intToAddress(uint64_t addr)
+{
+    //long long int addr_c = (unsigned)addr;
+    //DPRINTF(Addrbug, "Int to Addr translate happens for int: %d\n", addr);
+    //DPRINTF(Addrbug, "converted long long int type is: %#x, check in intToAddress: %d\n", addr_c, addr & 0xffffffff00000000);
     assert(!(addr & 0xffffffff00000000));
     return addr;
 }
 
 inline Addr
-intToAddress(int addr)
-{
-    assert(!(addr & 0xffffffff00000000));
-    return addr;
+Addr_cal(Addr baseSpadAddr,int coreToServer,int offset){
+  Addr result = baseSpadAddr + ((uint64_t)coreToServer << 12) + offset;
+  return result;
 }
 
 inline int

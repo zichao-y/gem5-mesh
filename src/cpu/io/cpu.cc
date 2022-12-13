@@ -13,11 +13,13 @@
 #include "cpu/io/mem_unit.hh"
 #include "cpu/io/thread_context.hh"
 #include "debug/IOCPU.hh"
-//#include "debug/LineTrace.hh"
+#include "debug/LineTrace.hh"
 
 #include "mem/ruby/scratchpad/Scratchpad.hh"
 
 #include "debug/Mesh.hh"
+
+#include "cpu/io/line_trace.hh"
 
 //-----------------------------------------------------------------------------
 // IOCPU::IcachePort
@@ -312,7 +314,7 @@ IOCPU::IOCPU(IOCPUParams* params)
       if (THE_ISA == ALPHA_ISA && ridx == TheISA::ZeroReg &&
           !zero_float_phys_reg) {
         zero_float_phys_reg = phys_reg;
-      }
+      } // ZY only ALPHA_ISA using a fixed phys_reg as zero_float_phys_reg?
     }
 
     /* Here we need two 'interfaces' the 'whole register' and the 'register
@@ -359,7 +361,7 @@ IOCPU::init()
     threadContexts[tid]->initMemProxies(threadContexts[tid]);
 
   for (int i = 0; i < m_pipeline.getLen(); i++) {
-    m_pipeline[i]->init();
+    m_pipeline[i]->init(); //ZY which init()?
   }
 
   m_local_spm = static_cast<CpuPort&>(getDataPort().getSlavePort()).getAttachedSpad();
@@ -1205,10 +1207,10 @@ IOCPU::linetrace()
   std::stringstream ss;
   ss << std::setw(10) << curTick() / clockPeriod();
 
-  for (int i = 0; i < m_pipeline.getLen(); i++)
-    m_pipeline[i]->linetrace(ss);
-
-  //DPRINTF(LineTrace, "%s\n", ss.str());
+  //for (int i = 0; i < m_pipeline.getLen(); i++)
+    //m_pipeline[i]->linetrace(ss);
+  m_pipeline[4]->linetrace(ss);
+  DPRINTF(LineTrace, "%s\n", ss.str());
 #endif
 }
 

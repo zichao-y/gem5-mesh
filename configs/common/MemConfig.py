@@ -132,6 +132,8 @@ def create_mem_ctrl(cls, r, i, nbr_mem_ctrls, intlv_bits, intlv_size):
                 ctrl.devices_per_rank.value
 
             intlv_low_bit = int(math.log(rowbuffer_size, 2))
+        else:    
+            print("no rowbuffer size considered")
 
     # We got all we need to configure the appropriate address
     # range

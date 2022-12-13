@@ -9,6 +9,7 @@
 #ifndef __CPU_IO_CPU_HH__
 #define __CPU_IO_CPU_HH__
 
+
 #include <bitset>
 
 #include "arch/generic/types.hh"

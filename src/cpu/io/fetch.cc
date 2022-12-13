@@ -13,6 +13,8 @@
 
 #include "debug/PipelinePrint.hh"
 
+#include "cpu/io/line_trace.hh"
+
 
 //-----------------------------------------------------------------------------
 // Fetch::FetchTranslation

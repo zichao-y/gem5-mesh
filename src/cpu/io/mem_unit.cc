@@ -9,12 +9,14 @@
 
 #include "cpu/io/cpu.hh"
 #include "debug/LSQ.hh"
+#include "debug/SpgeMM.hh"
 
 #include "mem/page_table.hh"
 #include "mem/ruby/scratchpad/Scratchpad.hh"
 #include "debug/Mesh.hh"
 #include "debug/RiscvVector.hh"
 #include "debug/Frame.hh"
+#include "cpu/io/line_trace.hh"
 
 MemUnit::MemUnit(const char* _iew_name, const char* _name,
                  IOCPU* _cpu_p, IOCPUParams* params)
@@ -152,6 +154,7 @@ MemUnit::doAddrCalc()
   if (m_s1_inst != nullptr) {
 #ifdef DEBUG
     m_status.set(Status::S0_Stalled);
+    m_s0stall ++;
 #endif
     return;   // S1 is busy, so we stall S0
   }
@@ -184,7 +187,8 @@ MemUnit::doTranslation()
   if (m_s1_inst->isLoad() && m_ld_queue.size() == m_num_lq_entries) {
     DPRINTF(LSQ, "LQ is full. Stalling\n");
 #ifdef DEBUG
-    m_status.set(Status::S1_Stalled);
+    m_status.set(Status::S1_Stalled_lq);
+    m_s1stall_lq ++;
 #endif
     return;   // no available load queue slot for this inst
   }
@@ -196,7 +200,8 @@ MemUnit::doTranslation()
       m_st_queue.size() == m_num_sq_entries) {
     DPRINTF(LSQ, "SQ is full. Stalling\n");
 #ifdef DEBUG
-    m_status.set(Status::S1_Stalled);
+    m_status.set(Status::S1_Stalled_sq);
+    m_s1stall_sq ++;
 #endif
     return;   // no available store queue slot for this inst
   }
@@ -283,7 +288,8 @@ MemUnit::tryLdIssue(size_t &num_issued_insts) {
         delete pkt->popSenderState();
         delete pkt;
 #ifdef DEBUG
-        m_status.set(S2_Stalled);
+        m_status.set(S2_Stalled_cache);
+        m_s2stall_cache ++;
 #endif
         // exit issue stage early since the dcache is busy
         return;
@@ -293,9 +299,12 @@ MemUnit::tryLdIssue(size_t &num_issued_insts) {
         if (m_cpu_p->getEarlyVector()->isSlave()) 
           DPRINTF(Mesh, "Send %s to paddr %#x sp vaddr %#x\n", inst->toString(true), pkt->getAddr(), m_cpu_p->readArchIntReg(RiscvISA::StackPointerReg, 0));
 
+        if (int(pkt->req->getVaddr()) == 839940 ) DPRINTF(SpgeMM, "Load request to virtual address 839940, inst is %s, Paddr is %#x",inst->toString(true),pkt->getAddr());
+        if (int(pkt->getAddr()) == 782596 ) DPRINTF(SpgeMM, "Load request to Paddr address bf104, inst is %s, Vaddr is %#x",inst->toString(true),pkt->req->getVaddr());
         // mark this inst as "issued to memory"
         inst->setIssuedToMem();
         num_issued_insts++;
+        inst->issue_tick = curTick();
         
 #ifdef DEBUG
         m_issued_insts.push_back(inst);
@@ -303,12 +312,18 @@ MemUnit::tryLdIssue(size_t &num_issued_insts) {
 #endif
       }
     }
-#ifdef DEBUG
-    else if (!inst->canIssueToMem()){
-      m_status.set(S2_Stalled);
-    }
-#endif
   }
+#ifdef DEBUG
+  if (num_issued_insts < m_num_dcache_ports && m_ld_queue.size()>0){
+    for (auto& inst : m_ld_queue){
+      if (!inst->isExecuted() && !inst->isIssuedToMem() && !inst->canIssueToMem()){
+        m_stalled_dep_insts.push_back(inst);
+        m_status.set(S2_Stalled_dep);
+        m_s2stall_dep ++;
+      }
+    }
+  }
+#endif
 }
 
 void
@@ -339,7 +354,8 @@ MemUnit::tryStIssue(size_t &num_issued_insts) {
         delete pkt->popSenderState();
         delete pkt;
 #ifdef DEBUG
-        m_status.set(S2_Stalled);
+        m_status.set(S2_Stalled_cache);
+        m_s2stall_cache ++;
 #endif
         // exit issue stage early since the dcache is busy
         return;
@@ -349,12 +365,14 @@ MemUnit::tryStIssue(size_t &num_issued_insts) {
         DPRINTF(LSQ, "Sent request to memory for inst %s with vaddr %#x paddr %#x\n", inst->toString(true), pkt->req->getVaddr(), addr);
         if (m_cpu_p->getEarlyVector()->getConfigured()) 
           DPRINTF(Mesh, "Send %s to paddr %#x sp vaddr %#x\n", inst->toString(true), addr, m_cpu_p->readArchIntReg(RiscvISA::StackPointerReg, 0));
-
+        if (int(pkt->req->getVaddr()) == 839940 ) DPRINTF(SpgeMM, "Store request to virtual address 839940, inst is %s, Paddr is %#x",inst->toString(true),addr);
+        if (int(addr) == 782596 ) DPRINTF(SpgeMM, "Store request to Paddr address bf104, inst is %s, Vaddr is %#x",inst->toString(true),pkt->req->getVaddr());
         // mark this inst as "issued to memory"
         inst->setIssuedToMem();
         num_issued_insts++;
+        inst->issue_tick = curTick();
 
-        // if there is any dependent load, mark them as "CanIssueToMem"
+        // if there is any dependent load, mark them as "CanIssueToMem" 
         if (m_st_ld_map.count(inst->seq_num) == 1) {
           for (auto& ld_inst : m_st_ld_map[inst->seq_num]) {
             assert(!ld_inst->canIssueToMem());
@@ -422,7 +440,9 @@ MemUnit::tryStIssue(size_t &num_issued_insts) {
     }
 #ifdef DEBUG
     else if (!inst->canIssueToMem()){
-      m_status.set(S2_Stalled);
+      m_stalled_rob_inst=inst;
+      m_status.set(S2_Stalled_rob);
+      m_s2stall_rob ++;
     }
 #endif
   }
@@ -522,6 +542,7 @@ MemUnit::processCacheCompletion(PacketPtr pkt)
                       safe_cast<MemUnit::SenderState*>(pkt->popSenderState());
   assert(ss && ss->inst);
   DPRINTF(LSQ, "Received response pkt for inst %s\n", ss->inst->toString());
+  ss->inst->issue_tick = curTick() - ss->inst->issue_tick;
 
   if (ss->inst->isLoad()) {
     // look up ss->inst in m_ld_queue. If it no longer exists, it must have
@@ -695,6 +716,7 @@ MemUnit::pushMemReq(IODynInst* inst, bool is_load, uint8_t* data,
       for (int i = size - 1; i >= 0; i--) {
         spadVAddr |= ((uint64_t)data[i]) << (i * 8);
       }
+      
 
       // part of this address encodes the coreOffset we're going to use
       int baseCoreOffset = bits(spadVAddr, 31, 12);
@@ -702,14 +724,15 @@ MemUnit::pushMemReq(IODynInst* inst, bool is_load, uint8_t* data,
       // fake the virtual scratchpad address for this core
       // TODO this should put the vector group origin on instead of the scratchpad
       Addr spadIdx = bits(spadVAddr, 11, 0);
-      spadVAddr = 0x10000000 | (m_cpu_p->cpuId() << 12) | ( spadIdx * size );
+      DPRINTF(Frame,"size is %d, spadVAddr origin is %#x, spadIdx is %#x\n",size,spadVAddr,spadIdx);
+      spadVAddr = 0x10000000 | (m_cpu_p->cpuId() << 16) | ( spadIdx * size );
       
       // need to translate the address, do atomically,
       // real hammerblade doesnt have virtual addresses anyway
       Addr spadPAddr = 0;
       assert(m_cpu_p->tcBase(tid)->getProcessPtr()->pTable->translate(spadVAddr, spadPAddr));
       m_s1_inst->mem_req_p->prefetchAddr = spadPAddr;
-
+      DPRINTF(Frame,"cpuId is %d, spadVAddr processed is %#x, spadPAddr processed is %#x\n",m_cpu_p->cpuId(),spadVAddr,spadPAddr);
       // immediate field used for count so remove that from the address
       auto upper7 = bits((uint32_t)m_s1_inst->static_inst_p->machInst, 31, 25);
       auto lower5 = bits((uint32_t)m_s1_inst->static_inst_p->machInst, 11, 7);
@@ -959,6 +982,33 @@ MemUnit::regStats() {
     .name(name() + ".scalar_prefetches")
     .desc("number of prefetches with length one")
   ;
+#ifdef DEBUG
+  m_s0stall
+    .name(name() + ".s0_stall")
+    .desc("number of stalls in s0 stage")
+  ;
+  m_s1stall_lq
+    .name(name() + ".s1_stall_lq")
+    .desc("number of stalls in s1 stage due to load queue full")
+  ;
+  m_s1stall_sq
+    .name(name() + ".s1_stall_sq")
+    .desc("number of stalls in s1 stage due to store queue full")
+  ;
+  m_s2stall_cache
+    .name(name() + ".s2_stall_cache")
+    .desc("number of stalls in s2 stage due to data cache busy")
+  ;
+  m_s2stall_dep
+    .name(name() + ".s2_stall_dep")
+    .desc("number of stalls in s2 stage due to load dependency")
+  ;
+  m_s2stall_rob
+    .name(name() + ".s2_stall_rob")
+    .desc("number of stalls in s2 stage due to store waiting for rob head")
+  ;
+
+#endif
 }
 
 void
@@ -980,8 +1030,10 @@ MemUnit::linetrace(std::stringstream& ss)
   s = " -> ";
   if (m_status[Status::Squashed])
     s += "x";
-  else if (m_status[Status::S1_Stalled])
-    s += "#";
+  else if (m_status[Status::S1_Stalled_lq])
+    s += "#l";
+  else if (m_status[Status::S1_Stalled_sq])
+    s += "#s";
   else if (m_status[Status::S1_Busy])
     s += m_translated_inst->toString();
   ss << std::setw(30) << std::left << s;
@@ -990,17 +1042,24 @@ MemUnit::linetrace(std::stringstream& ss)
   s = " -> ";
   if (m_status[Status::Squashed])
     s += "x";
-  else if (m_status[Status::S2_Stalled])
+  else if (m_status[Status::S2_Stalled_cache])
     s += "#";
+  else if (m_status[Status::S2_Stalled_dep])
+    for (auto inst : m_stalled_dep_insts)
+      s += "^" + inst->toString() + " "; 
+  else if (m_status[Status::S2_Stalled_rob])
+    s += "$" + m_stalled_rob_inst->toString() + " "; 
   else if (m_status[Status::S2_Busy])
     for (auto inst : m_issued_insts)
-      s += inst->toString() + " ";
+      s += "!" + inst->toString() + " ";
   ss << std::setw(30) << std::left << s;
 
   // reset
   m_addr_calculated_inst = nullptr;
   m_translated_inst = nullptr;
   m_issued_insts.clear();
+  m_stalled_dep_insts.clear();
+  m_stalled_rob_inst = nullptr;
   m_status.reset();
 #endif
 }

@@ -1,5 +1,6 @@
 # defaults if environment variables not set. allows scritable command line
 
+
 N_SPS ?= 64
 # ifneq ($(ENV_N_SPS),)
 # 	N_SPS ?= $(ENV_N_SPS)
@@ -30,7 +31,9 @@ BASE_DIR := $(COMMON_DIR)/../..
 
 # installed cross compiler gcc for riscv
 RV_CC10 ?=/scratch/pbb59/riscv-rv64gv/bin/riscv64-unknown-linux-gnu-gcc
+#RV_CC10 ?=gcc
 RV_CC=$(RV_CC10)
+
 
 CFLAGS=-D_N_SPS=$(N_SPS) $(EXTRA_FLAGS) -O3 --std=gnu11 -static -I../common/ -T../common/spm.ld -lpthread -lm
 
@@ -44,6 +47,7 @@ COMMON_OBJS := $(notdir $(COMMON_SRCS:.c=.o))
 
 $(BENCHNAME) : $(TRILLIASM_OBJS) $(C_DEPS_NOKERN) $(COMMON_OBJS)
 	$(RV_CC) $(TRILLIASM_OBJS) $(C_DEPS_NOKERN) $(COMMON_OBJS) $(CFLAGS) -o $(BINARY_NAME)
+
 
 run_simple: $(BENCHNAME)
 	$(BASE_DIR)/build/RVSP/gem5.opt \

@@ -12,6 +12,8 @@
 #include "debug/Commit.hh"
 #include "debug/Mesh.hh"
 
+#include "cpu/io/line_trace.hh"
+
 Commit::Commit(IOCPU* _cpu_p, IOCPUParams* params, size_t in_size, size_t out_size)
     : Stage(_cpu_p, in_size, out_size, StageIdx::CommitIdx, true),
       m_num_threads(params->numThreads),
@@ -45,6 +47,36 @@ Commit::regStats()
     .name(name() + ".stall_from_late_vector")
     .desc("number of stalls before try commit due to late vector")
   ;
+  /*number_of_ld_inst
+    .name(name() + ".ld_inst_total")
+    .desc("number of load instruction commited")
+  ;
+  number_of_st_inst
+    .name(name() + ".st_inst_total")
+    .desc("number of store instruction commited")
+  ;
+  number_of_ld_ticks
+    .name(name() + ".ld_ticks_total")
+    .desc("number of total load latency")
+  ;
+  number_of_st_ticks
+    .name(name() + ".st_ticks_total")
+    .desc("number of total store latency")
+  ;
+  m_ld_latency
+    .init(16)
+    .name(name() + ".ld_latency")
+    .desc("Load response latency")
+    .flags(Stats::pdf | Stats::nozero | Stats::nonan)
+    ;
+
+  ld_latency_de
+    .init(0,100000,10)
+    .name(name() + ".ld_latency_de")
+    .desc("ld latency distribution under 100 cycles")
+    .flags(Stats::pdf | Stats::nozero | Stats::nonan)
+    ;
+  */
 }
 
 void
@@ -108,6 +140,19 @@ Commit::doCommit()
       inst->setCanCommit();
     else
       inst->setNeedToTrapFault();
+
+    /*if(inst->isLoad()){
+      m_ld_latency.sample(inst->issue_tick);
+      ld_latency_de.sample(inst->issue_tick);
+      number_of_ld_inst ++;
+      number_of_ld_ticks += inst->issue_tick;
+    }
+    else if(inst->isStore() || inst->isAtomic() || inst->isStoreConditional()){
+      number_of_st_inst ++;
+      number_of_st_ticks += inst->issue_tick;   
+    }*/
+
+    
 
     // pop the inst from the incoming buffer and give credits to the previous
     // stage

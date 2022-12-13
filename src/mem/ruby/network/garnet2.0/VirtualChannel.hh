@@ -87,6 +87,14 @@ class VirtualChannel
         return m_input_buffer->getTopFlit();
     }
 
+    inline bool
+    Isempty(){
+        return m_input_buffer->isEmpty();
+    }
+
+
+
+
     uint32_t functionalWrite(Packet *pkt);
     bool functionalRead(Packet* pkt);
 

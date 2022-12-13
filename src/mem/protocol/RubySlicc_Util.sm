@@ -37,6 +37,7 @@ NodeID intToID(int nodenum);
 int IDToInt(NodeID id);
 int addressToInt(Addr addr);
 Addr intToAddress(int addr);
+Addr Addr_cal(Addr addr, int idx, int offset);
 int AddrOffset(Addr a, Addr b);
 void procProfileCoherenceRequest(NodeID node, bool needCLB);
 void dirProfileCoherenceRequest(NodeID node, bool needCLB);

@@ -10,6 +10,8 @@
 #define FILENAME_SZ 1024
 #define PARA_SZ 16
 #define BURST_LEN 16
+#define QUEUE_SIZE 640
+
 
 //tile size
 #ifndef BLK_DIM
@@ -65,7 +67,7 @@
 
 typedef float DTYPE;
 
-void spmm_manycore(const float *A_val, const float *B_val, float *C_val, const int *A_idx, const int *A_ptr, int m, int n, int k, int ptid, int num_cores, int *wr_mask);
+void spmm_manycore(const float *A_val, const float *B_val, float *C_val, float **C_inter_val, int **C_inter_idx, const int *A_idx, const int *A_ptr, const int *B_idx, const int *B_ptr, int *C_idx, int *C_ptr,int m, int n, int k, int ptid, int num_cores, float *C_valout_tmp, int *C_idxout_tmp,float** helper_queue_valarray,int** helper_queue_idxarray, float *C_val_extend, int *C_idx_extend);
 
 
 #if VECTOR_LEN==4 && _N_SPS==64
@@ -151,25 +153,27 @@ void spmm_manycore(const float *A_val, const float *B_val, float *C_val, const i
 typedef struct Kern_Args
 {
   const float *A_val, *B_val; 
-  float *C_val;
-  const int  *A_ptr, *A_idx;
-  int m, n, k, mat_nnz;
-  int ptid;
+  float *C_valout_tmp,*C_val, *C_val_extend;
+  float **C_inter_val, **helper_queue_valarray;
+  const int  *A_ptr, *A_idx, *B_ptr, *B_idx;
+  int *C_ptr,*C_idx,*C_idxout_tmp, *C_idx_extend; 
+  int **C_inter_idx, **helper_queue_idxarray;
+  int m, n, k;
+  int ptid, error;
   int num_cores;
-  int *wr_mask;
 } Kern_Args;
 
 // helper to pack vvadd args
 Kern_Args *construct_args(
-    const float *A_val, const float *B_val, float *C_val, const int *A_idx, const int *A_ptr, int m, int n,
-     int k, int mat_nnz, int ptid, int num_cores, int *wr_mask);
+    const float *A_val, const float *B_val, float *C_val, float **C_inter_val, int **C_inter_idx, const int *A_idx, const int *A_ptr, const int *B_idx, const int *B_ptr, int *C_idx, int *C_ptr,int m, int n,
+     int k, int ptid, int num_cores, float *C_valout_tmp, int *C_idxout_tmp,float** helper_queue_valarray,int** helper_queue_idxarray,float *C_val_extend, int *C_idx_extend);
 
 // pthread call
 void *pthread_kernel(void *args);
 
 // vvadd kernel
 void kernel(
-    const float *A_val, const float *B_val, float *C_val, const int *A_idx, const int *A_ptr, int m, int n,
-     int k, int mat_nnz, int ptid, int num_cores, int *wr_mask);
+    const float *A_val, const float *B_val, float *C_val, float **C_inter_val, int **C_inter_idx, const int *A_idx, const int *A_ptr, const int *B_idx, const int *B_ptr, int *C_idx, int *C_ptr, int m, int n,
+     int k, int ptid, int num_cores, float *C_valout_tmp, int *C_idxout_tmp,float** helper_queue_valarray,int** helper_queue_idxarray,float *C_val_extend, int *C_idx_extend);
 
 #endif

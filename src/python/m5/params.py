@@ -596,7 +596,7 @@ class CheckedInt(NumericParamValue):
 
     def _check(self):
         if not self.min <= self.value <= self.max:
-            raise TypeError('Integer param out of bounds %d < %d < %d' % \
+            raise TypeError('Integer params out of bounds %d < %d < %d' % \
                   (self.min, self.value, self.max))
 
     def __init__(self, value):

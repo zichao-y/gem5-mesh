@@ -21,6 +21,8 @@
 #include "params/IOCPU.hh"
 #include "cpu/io/stage.hh"
 
+#include "cpu/io/line_trace.hh"
+
 class Rename : public Stage
 {
   public:

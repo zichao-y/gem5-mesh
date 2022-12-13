@@ -3,11 +3,14 @@
 #include <pthread.h>
 #include <math.h>
 #include <string.h>
+#include <stdatomic.h>
 
 #include "spad.h"
 #include "pthread_launch.h"
 #include "spmm.h"
 #include "util.h"
+#include "data.h"
+#include "bind_defs.h"
 
 
 // #define PRINT_OUT
@@ -62,7 +65,7 @@
   fclose(file);
 }*/
 
-void read_file_int(char* filename, int* buffer) {
+/*void read_file_int(char* filename, int* buffer) {
   FILE* file = fopen(filename, "r");
   char* line_buf;
   size_t line_buf_size = 0;
@@ -117,8 +120,9 @@ void read_value_float(char* filename, float* buffer) {
   line_buf = NULL;  
   // close the file
   fclose(file);
-}
+}*/
 
+atomic_int workq;
 
 
 float absVal(float a)
@@ -157,6 +161,8 @@ int polybenchCompare(float val1, float val2) {
 }
 
 
+
+
 int main(int argc, char *argv[])
 {
 
@@ -174,15 +180,23 @@ int main(int argc, char *argv[])
 
   //int cores_x, cores_y;
   //int num_cores = get_dimensions(&cores_x, &cores_y);
-  int cores_x = 8;
-  int cores_y = 4;
+  int cores_x = 1;
+  int cores_y = 1;
+  if (argc > 1)
+      cores_x = atoi(argv[1]);
+  if (argc > 2)
+      cores_y = atoi(argv[2]);
   int num_cores = cores_x * cores_y;
+  int wr_complete[64];
+  for(int i=0; i<64; i++){
+    wr_complete[i] = 0;
+  }
   /*--------------------------------------------------------------------
   * Data initialization
   *-------------------------------------------------------------------*/
-  int debug = 0;
+  /*int debug = 0;
   int debug_2 =0;
-  int synthetic_mat = 0; 
+  int synthetic_mat = 1; 
   int m,n,k,nnz;
   float den;
   char* filename_base ;
@@ -224,10 +238,10 @@ int main(int argc, char *argv[])
     }
 
     line_cnt++;
-    /* Show the line details */
+    // Show the line details 
     //printf("line[%06d]: chars=%06zd, buf size=%06zu, contents: %s", line_cnt, line_size, line_buf_size, line_buf);
 
-    /* Get the next line */
+    // Get the next line 
     line_size = getline(&line_buf, &line_buf_size, file);
   }
 
@@ -301,8 +315,40 @@ int main(int argc, char *argv[])
     strcat(f_C_val, "_C_val.dat");
     read_value_float(f_C_val, C_cmp);
 
-
+*/
   
+
+  //warm up l2
+//stats_on();
+
+/*#ifdef CACHE_WARM
+
+float tempB, tempC, tempA;
+int tempAi, tempAp;
+  for(int i=0; i<mat_k*mat_n; i++){
+    if (valB[i] > tempB)
+      tempB = valB[i]; 
+  }
+
+  for(int i=0; i<mat_k*mat_m; i++){
+    if (valC[i] > tempC)
+      tempC = valC[i];
+  }
+
+  for(int i=0; i<mat_nnz; i++){
+    if (valA[i] > tempA){
+      tempA = valA[i];
+      tempAi = idxA[i]; 
+    }
+  }
+
+  for(int i=0; i<mat_m+1; i++){
+    if (ptrA[i] > tempAp)
+      tempAp = ptrA[i];
+  }
+  printf("tempA: %f, tempB: %f, tempAi: %d, tempAp: %d", tempA, tempB, tempAi, tempAp);
+
+  #endif*/
 
 
 
@@ -310,6 +356,10 @@ int main(int argc, char *argv[])
   /*--------------------------------------------------------------------
   * Pack argument for kernel
   *-------------------------------------------------------------------*/
+
+  float *C_val_ptr;
+
+  float* C_kernel = (float*)malloc_cache_aligned(sizeof(float),mat_m*mat_k,(void**)&C_val_ptr);
 
   // initialize the arguments to send to each device core
   Kern_Args **kern_args = (Kern_Args **)malloc(sizeof(Kern_Args *) * num_cores);
@@ -320,7 +370,7 @@ int main(int argc, char *argv[])
     {
       int i = x + y * cores_x;
     
-      kern_args[i] = construct_args(A_val, B_val, C_val, A_idx, A_ptr, m, k, i);
+      kern_args[i] = construct_args(valA, valB, C_kernel, idxA, ptrA, mat_m, mat_n, mat_k, mat_nnz, i,num_cores,wr_complete);
     }
   }
 
@@ -335,25 +385,26 @@ int main(int argc, char *argv[])
 /*--------------------------------------------------------------------
   * Check result and cleanup data
   *-------------------------------------------------------------------*/
-
-  for(int i=0; i<m; i++){
-    for(int j=0; j<k; j++){
-      if (polybenchCompare(C_val[i * k + j], C_cmp[i * k + j]))
+  int error=0;
+  for(int i=0; i<mat_m; i++){
+    for(int j=0; j<mat_k; j++){
+      if (polybenchCompare(C_kernel[i * mat_k + j], valC[i * mat_k + j]))
       {
-        printf("%f %f at i:%d, j:%d\n",C_val[i * n + j],C_cmp[i * k + j], i,j);
-        printf("[[FAIL]]\n");
-        return 1;
+        printf("Kernel result: %f, expected: %f at [i:%d, j:%d]\n",C_kernel[i * mat_k + j],valC[i * mat_k + j], i,j);
+        error +=1;
       }
     }
   }
+  if (error >0){
+    printf("total error detected: %d\n",error);
+    return 1;
+  }
 
+  printf("The workq result is %d\n ",workq);
   printf("[[SUCCESS]]\n");
 
-  free(A_val_ptr);
-  free(B_val_ptr);
+  
   free(C_val_ptr);
-  free(A_idx_ptr);
-  free(A_ptr_ptr);
-  free(C_cmp_ptr);
+
   return 0;
 }

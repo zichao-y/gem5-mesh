@@ -7,6 +7,7 @@
 #define CACHE_LINE_SIZE_LOG2 ((unsigned long long)ceil(log2(CACHE_LINE_SIZE)))
 
 pthread_barrier_t start_barrier;
+pthread_barrier_t body_barrier;
 
 void launch_kernel(void* (*kernel)(void*), void **args, int cores_x, int cores_y) {
   
@@ -19,11 +20,13 @@ void launch_kernel(void* (*kernel)(void*), void **args, int cores_x, int cores_y
   // barrier to guarentee one thread per core (prevents from any finishing
   // before scheduling)
   pthread_barrier_init(&start_barrier, NULL, num_cores);
+  pthread_barrier_init(&body_barrier, NULL, num_cores);
 
   // initialize pthreads
   for (int i = 0; i < dev_cores; i++) {
     threads[i] = (pthread_t*)malloc(sizeof(pthread_t));
   }
+  //printf("finish pthread initialization\n");
 
   // create a thread on each device core
   for (int i = 0; i < dev_cores; i++) {
@@ -79,10 +82,13 @@ int get_dimensions(int *cores_x, int *cores_y) {
 
 void *malloc_cache_aligned(size_t element_size, size_t num_elements, void **orig_ptr) {
   void *ptr = malloc(element_size * (num_elements + CACHE_LINE_SIZE));
+  
   *orig_ptr = ptr;
   if (element_size == sizeof(int)) {
     ptr = (void*)((unsigned long long)((int*)ptr + CACHE_LINE_SIZE) & ~((1ULL << CACHE_LINE_SIZE_LOG2) - 1));
+    //printf("element_size is:%d, num_elements is:%d,ptr is:%d,orig_ptr is:%d\n",element_size,ptr,*orig_ptr);
   }
+  
   else {
     return NULL;
   }

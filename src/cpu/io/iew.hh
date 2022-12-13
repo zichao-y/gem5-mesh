@@ -39,6 +39,8 @@
 
 #include "custom/cpi_stack.hh"
 
+#include "cpu/io/line_trace.hh"
+
 /**
  * IEW stage: Issue, Execute, Writeback stages
  */
@@ -81,6 +83,8 @@ class IEW : public Stage
       // Issue stage
       IssueSquashed,
       IssueInitStall,
+      IssueStallonFetch,
+      IssueStallonFrame,
       IssueBusy,
       // Writeback stage
       WBSquashed,

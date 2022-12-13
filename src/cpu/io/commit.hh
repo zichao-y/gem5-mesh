@@ -111,6 +111,14 @@ class Commit : public Stage
 
   private:
     Stats::Scalar m_stall_due_to_vector;
+    //Stats::Scalar number_of_ld_inst;
+    //Stats::Scalar number_of_st_inst;
+    //Stats::Scalar number_of_ld_ticks;
+    //Stats::Scalar number_of_st_ticks;
+    //Stats::Histogram m_ld_latency;
+    //Stats::Distribution ld_latency_de;
+
+
 };
 
 #endif // __CPU_IO_COMMIT_HH__

@@ -9,6 +9,8 @@
 
 #include "debug/IEW.hh"
 
+#include "cpu/io/line_trace.hh"
+
 UnpipelinedExecUnit::UnpipelinedExecUnit(const char* _iew_name,
                                          const char* _name, size_t _latency)
     : m_iew_name(_iew_name),

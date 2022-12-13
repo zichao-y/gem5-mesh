@@ -561,6 +561,10 @@ public:
 
     /** flag to stop squashing on an instruction marked 'IsSquashAfter' */
     bool squash_if_squash_after;
+
+    //record issue tick of the instruction
+    Tick issue_tick;
+    
 };
 
 typedef std::shared_ptr<IODynInst> IODynInstPtr;

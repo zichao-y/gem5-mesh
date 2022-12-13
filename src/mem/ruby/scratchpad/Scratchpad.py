@@ -8,7 +8,7 @@ class Scratchpad(RubyController):
   cxx_header = "mem/ruby/scratchpad/Scratchpad.hh"
 
   sp_size           = Param.Int(0, "Size of this scratchpad (in bytes)")
-  dram_size         = Param.Int(0, "Size of DRAM (in bytes)")
+  dram_size         = Param.UInt64(0, "Size of DRAM (in bytes)")
 
   memReqBuffer      = Param.MessageBuffer("")
   memRespBuffer     = Param.MessageBuffer("")

@@ -396,6 +396,7 @@ Scratchpad::wakeup()
         
         DPRINTF(Frame, "Recv remote store %#x num words %d data %d %d %d %d\n", 
           llc_msg_p->m_LineAddress, llc_msg_p->m_Len, data[3], data[2], data[1], data[0]);
+        DPRINTF(Frame,"result of getScratchpadIdFromAddr is: %d, current spID is: %d\n",getScratchpadIdFromAddr(pkt_p->getAddr()),m_version);
         
         assert(getScratchpadIdFromAddr(pkt_p->getAddr()) == m_version);
       
@@ -897,8 +898,13 @@ Scratchpad::handleRemoteReq(Packet* pkt_p, MachineID remote_sender)
 
     DPRINTF(Scratchpad, "Sending pkt %s to %s\n", pkt_p->print(), dst_port);
 
-    if (pkt_p->isRead())
-      DPRINTF(LoadTrack, "Sending load request from remote SP %#x\n", pkt_p->getAddr());
+    /*if (pkt_p->isRead()){
+      unsigned buf_size = pkt_p->getSize();
+      uint8_t *buff = new uint8_t[buf_size];
+      pkt_p->writeData(buff);
+      DPRINTF(LoadTrack, "Sending load response from remote SP %#x, with first byte of data: %d %d %d %d \n", pkt_p->getAddr(),buff[0],buff[1],buff[2],buff[3]);
+      delete buff;
+    }*/
 
     m_remote_resp_buffer_p->enqueue(msg_p,
                                     clockEdge(),
@@ -940,9 +946,16 @@ Scratchpad::sendCPUResponse()
   assert(!m_cpu_resp_event.scheduled());
   assert(m_cpu_resp_pkts.front() != nullptr);
 
+  
   DPRINTF(Scratchpad, "Sending %s to CPU\n", m_cpu_resp_pkts.front()->print());
-  if (m_cpu_resp_pkts.front()->isRead())
-    DPRINTF(LoadTrack, "Sending Load request to CPU %#x\n", m_cpu_resp_pkts.front()->getAddr());
+  
+  /*if (m_cpu_resp_pkts.front()->isRead()){
+    unsigned buf_size = m_cpu_resp_pkts.front()->getSize();
+    uint8_t *buff = new uint8_t[buf_size];
+    m_cpu_resp_pkts.front()->writeData(buff);
+    DPRINTF(LoadTrack, "Sending Load response to CPU %#x, with first byte of datat: %d %d %d %d\n", m_cpu_resp_pkts.front()->getAddr(),buff[0],buff[1],buff[2],buff[3]);
+    delete buff;
+  }*/
 
   if (!m_cpu_port_p->sendTimingResp(m_cpu_resp_pkts.front())) {
     panic("Failed to send a response to CPU. \
@@ -966,6 +979,7 @@ Scratchpad::getScratchpadIdFromAddr(Addr addr) const
 {
   // XXX: assume the scratchpad address range starts right after the DRAM
   // address range
+  DPRINTF(Frame,"From getScratchpadIdFromAddr: input addr is: %#x, m_base_spm_addr is: %#x, m_size is: %d\n",addr,m_base_spm_addr,m_size);
   if (addr < m_base_spm_addr) {
     // out of scratchpad address range, this address belongs to normal DRAM
     // memory region
@@ -1085,7 +1099,7 @@ Scratchpad::getDesiredRegion(Addr addr) {
   int prefetchSectionIdx = padIdx - SPM_DATA_WORD_OFFSET;
   int region = prefetchSectionIdx / getRegionElements();
   if (region >= getNumRegions()) {
-    DPRINTF(Frame, "addr %#x padIdx %d region %d\n", addr, padIdx, region);
+    DPRINTF(Frame, "addr %#x padIdx %d region %d, RegionElements: %d\n", addr, padIdx, region,getRegionElements());
     assert(false);
   }
   return region;

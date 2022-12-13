@@ -119,6 +119,12 @@ class InputUnit : public Consumer
     }
 
     inline bool
+    isEmpty(int vc)
+    {
+        return m_vcs[vc]->Isempty();
+    }
+
+    inline bool
     isReady(int invc, Cycles curTime)
     {
         return m_vcs[invc]->isReady(curTime);

@@ -34,6 +34,7 @@
 #include "mem/ruby/network/garnet2.0/SwitchAllocator.hh"
 
 #include "debug/RubyNetwork.hh"
+#include "debug/Arbitor.hh"
 #include "mem/ruby/network/garnet2.0/GarnetNetwork.hh"
 #include "mem/ruby/network/garnet2.0/InputUnit.hh"
 #include "mem/ruby/network/garnet2.0/OutputUnit.hh"
@@ -48,6 +49,7 @@ SwitchAllocator::SwitchAllocator(Router *router)
     m_router = router;
     m_num_vcs = m_router->get_num_vcs();
     m_vc_per_vnet = m_router->get_vc_per_vnet();
+    alg = ROUND_ROBIN;
 
     m_input_arbiter_activity = 0;
     m_output_arbiter_activity = 0;
@@ -95,12 +97,251 @@ void
 SwitchAllocator::wakeup()
 {
 
-    arbitrate_inports(); // First stage of allocation
+    if (alg == ROUND_ROBIN) {
+      arbitrate_inports(); // First stage of allocation
 
-    arbitrate_outports(); // Second stage of allocation
+      arbitrate_outports(); // Second stage of allocation
+    }
+    else{
+      unified_arbitrate();
+    }
 
     clear_request_vector();
     check_for_wakeup();
+}
+
+/*
+ * One-stage arbitration algorithm for global aging
+ * 
+ */
+void SwitchAllocator::unified_arbitrate() {
+  
+  // For each output port, collect information from all input ports and 
+  // VCs, send the information into the model and get predictions
+
+  // Pre-compute this so we don't have to recompute every time
+  int num_inputs = m_num_inports * m_num_vcs;
+
+  // The final decisions
+  std::vector<int> output_port_winners(m_num_outports, invalid_choice);
+  std::vector<bool> inport_used(m_num_inports, false);
+  
+  // Loop through all output ports
+  for (int outport = 0; outport < m_num_outports; outport ++ ) {
+    // Allocate space for prediction and logging
+    std::vector<bool> useful_for_this_port(num_inputs, false);
+    std::vector<float> tmp_global_age(num_inputs, 0.0f);
+    // Loop through all inport ports, all input VCs, and get the features
+    for (int inport = 0; inport < m_num_inports; inport++) {
+      // Get the input unit
+      auto input_unit = m_input_unit[inport];
+      // Go through all virtual channels
+      for (int invc = 0; invc < m_num_vcs; invc++){
+        // Compute the index
+        int idx = inport * m_num_vcs + invc;
+        // If this channel needs arbitration, go on
+        if (input_unit->need_stage(invc, SA_, m_router->curCycle())) {
+          // check if the flit in this InputVC is allowed to be sent
+          // send_allowed conditions described in that function.
+          int target_outport = input_unit->get_outport(invc);
+          int target_outvc = input_unit->get_outvc(invc);
+          if (target_outport == outport){
+            bool make_request = send_allowed(inport, invc, target_outport, target_outvc);
+            if (make_request) {
+              flit *t_flit = input_unit->peekTopFlit(invc);
+              tmp_global_age[idx] = (m_router->curCycle() - t_flit->get_enqueue_time()) / global_age_norm_factor; 
+              useful_for_this_port[idx] = true;
+            }
+          }
+        }
+      }
+    }
+    // Now we should have all the features from each VC
+    // with the ones unrelated to the current outport masked
+
+    // If our agent has more than one choice, then refer to the model
+    // Otherwise, we can tell right now
+    int winner = invalid_choice;
+    
+    bool easy_choice = check_trivial_cases(useful_for_this_port, winner);
+    if(easy_choice) {
+      if(winner >-1){
+        int inport_tmp = winner/m_num_vcs;
+        if (inport_used[inport_tmp]){
+          winner = -1;
+        }
+        else{
+          inport_used[inport_tmp] = true;
+        }
+      }
+    }
+    else {
+      // Choose the best legal result
+      winner = choose_best_result(tmp_global_age, useful_for_this_port,inport_used);
+    }
+    int to_be_sent = 0;
+    for(int i=0; i<useful_for_this_port.size(); i++){
+      to_be_sent += useful_for_this_port[i];
+    }
+    DPRINTF(Arbitor, "[GAArbitor] Router %d "
+        "compute best invc %d with value %f at outport %d "
+        "with %d valid invc "
+        "cycle: %lld\n",
+        m_router->get_id(), winner, tmp_global_age[winner],
+        m_router->getPortDirectionName(
+          m_output_unit[outport]->get_direction()),
+        to_be_sent,
+        m_router->curCycle());
+    // Store the winner
+    output_port_winners[outport] = winner;
+  }
+  
+  // Actually do the arbitration
+  arbitrate_outports_with_winners(output_port_winners);
+
+}
+
+// Check for trivial cases to reduce the number of useless samples
+bool SwitchAllocator::check_trivial_cases(
+    const std::vector<bool>& useful_for_this_port,
+    int& winner) {
+  int useful_cnt = 0;
+  for (int i = 0; i < useful_for_this_port.size(); i ++ ) {
+    if (useful_for_this_port[i]) {
+      useful_cnt += 1;
+      winner = i;
+    }
+  }
+  if (useful_cnt <= 1) {
+    return true;
+  } else {
+    winner = invalid_choice;
+    return false;
+  }
+}
+
+/* 
+ * Choose the best legal result from the ML predictor's scores
+ */
+int SwitchAllocator::choose_best_result(
+    const std::vector<float>& scores, 
+    const std::vector<bool>& useful,
+    std::vector<bool>& inport_used) {
+  // Count the number of actual useful inputs
+  int useful_cnt = 0;
+  for (int i = 0; i < useful.size(); i ++ )
+    useful_cnt += useful[i];
+  // If nothing is useful, return -1 (invalid choice)
+  if (useful_cnt == 0)
+    return invalid_choice;
+
+  float best_score = -100000.0f; // should be small enough
+  int best_choice = -1;
+
+  // Choose between random choice and selecting the best
+  int rand_num = rand() % 10000;
+  if (rand_num < int(10000 * rand_ratio)) {
+    // Make a random choice
+    int chosen_idx = rand() % useful_cnt;
+    int cnter = 0;
+    for (int i = 0; i < scores.size(); i ++ ) {
+      if (useful[i]) {
+        if (cnter == chosen_idx) {
+          best_choice = i;
+          break;
+        } else {
+          cnter += 1;
+        }
+      }
+    }
+  } else {
+    // Not messing with the iterators and stuff
+    for (int i = 0; i < scores.size(); i ++ ) {
+      if ((scores[i] > best_score) && (useful[i]) && (!inport_used[i/m_num_vcs])) {
+        best_score = scores[i];
+        best_choice = i;
+      }
+    }
+  }
+  //assert(best_choice != invalid_choice);
+  if (best_choice >-1){
+    inport_used[best_choice/m_num_vcs]=true;
+  }
+  return best_choice;
+}
+
+// send flits to output ports based on the arbitration result 
+void SwitchAllocator::arbitrate_outports_with_winners(
+    const std::vector<int>& output_port_winners) {
+  // We are done with arbitration, get the winners' flits
+  // Now there are a set of input vc requests for output vcs.
+  // Again do round robin arbitration on these requests
+  // Independent arbiter at each output port
+  for (int outport = 0; outport < m_num_outports; outport++) {
+    // Get the winner
+    int winner = output_port_winners[outport];
+    // Skip if we don't have any accesses targeting this port at all
+    if (winner != invalid_choice) {
+      // Compute the actual inport and in-vc of the winner
+      int inport = winner / m_num_vcs;
+      int invc = winner % m_num_vcs;
+
+      // The rest should be the same with arbitrate_outports()...
+
+      // Get the input and output units
+      auto output_unit = m_output_unit[outport];
+      auto input_unit = m_input_unit[inport];
+      // grant this outport to this inport
+      int outvc = input_unit->get_outvc(invc);
+      if (outvc == -1) {
+        // VC Allocation - select any free VC from outport
+        outvc = vc_allocate(outport, inport, invc);
+      }
+
+      // remove flit from Input VC
+      flit *t_flit = input_unit->getTopFlit(invc);
+
+      DPRINTF(Arbitor, "[GAArbitor] SwitchAllocator at Router %d "
+        "granted outvc %d at outport %d "
+        "to invc %d at inport %d to flit %s at "
+        "cycle: %lld\n",
+        m_router->get_id(), outvc,
+        m_router->getPortDirectionName(
+          output_unit->get_direction()),
+        invc,
+        m_router->getPortDirectionName(
+          input_unit->get_direction()),
+        *t_flit,
+        m_router->curCycle());
+
+
+      t_flit->set_outport(outport);
+      t_flit->set_vc(outvc);
+      output_unit->decrement_credit(outvc);
+      t_flit->advance_stage(ST_, m_router->curCycle());
+      m_router->grant_switch(inport, t_flit);
+      m_output_arbiter_activity++;
+
+      if ((t_flit->get_type() == TAIL_) || (t_flit->get_type() == HEAD_TAIL_)) {
+        // This Input VC should now be empty
+        assert(!(input_unit->isReady(invc, m_router->curCycle())));
+        // Free this VC
+        input_unit->set_vc_idle(invc, m_router->curCycle());
+        // Send a credit back
+        // along with the information that this VC is now idle
+        input_unit->increment_credit(invc, true, m_router->curCycle());
+      } else {
+        // Send a credit back
+        // but do not indicate that the VC is idle
+        input_unit->increment_credit(invc, false, m_router->curCycle());
+      }
+
+      // remove this request
+      m_port_requests[outport][inport] = false;
+
+      // Not updating any of the round-robin stuff because we are not using it 
+    }
+  }
 }
 
 /*
@@ -415,6 +656,10 @@ SwitchAllocator::check_for_wakeup()
         }
     }
 }
+
+
+
+
 
 int
 SwitchAllocator::get_vnet(int invc)

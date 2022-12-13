@@ -36,7 +36,8 @@ IODynInst::IODynInst(const StaticInstPtr& static_inst,
       cond_resolved(false),
       broadcast_val(0),
       pred_at_issue(true),
-      squash_if_squash_after(true)
+      squash_if_squash_after(true),
+      issue_tick(0)
 { 
       master_info.fill(0);
 

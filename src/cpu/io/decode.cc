@@ -10,6 +10,8 @@
 #include "cpu/io/cpu.hh"
 #include "debug/Decode.hh"
 
+#include "cpu/io/line_trace.hh"
+
 Decode::Decode(IOCPU* _cpu_p, IOCPUParams* params, size_t in_size, size_t out_size)
     : Stage(_cpu_p, in_size, out_size, StageIdx::DecodeIdx, true),
     m_decode_width(1)

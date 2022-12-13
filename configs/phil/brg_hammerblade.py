@@ -89,7 +89,7 @@ def get_processes(options):
 
 def makeMeshTopology(n_rows, n_cols, n_cpus, n_xcels, system, network, double_l2,
                      IntLink, ExtLink, Router):
-  if (double_l2):
+  if (double_l2=="True"):
     assert(n_rows >= 3)
   else:
     assert(n_rows >= 2)
@@ -113,7 +113,7 @@ def makeMeshTopology(n_rows, n_cols, n_cpus, n_xcels, system, network, double_l2
   assert(n_cpus <= num_routers)
   assert(n_xcels <= num_routers)
 
-  if (double_l2):
+  if (double_l2=="True"):
     assert(len(l2s) <= n_cols*2)
   else:
     assert(len(l2s) <= n_cols)
@@ -136,7 +136,7 @@ def makeMeshTopology(n_rows, n_cols, n_cpus, n_xcels, system, network, double_l2
   l2_idx = 0
 
   # l2s to first row of l2s if duplicationg
-  if (double_l2):
+  if (double_l2=="True"):
     for i in xrange(len(l2s)/2):
       if l2_idx < len(l2s)/2:
         l2_ext_link = ExtLink(link_id   = link_count,
@@ -366,21 +366,31 @@ parser.add_option("--dram-bw", default=16,
 parser.add_option("--num-col", default=8,
   help="number of columns of the tile array")
 
-parser.add_option("--num-row", default=2,
+parser.add_option("--num-row", default=8,
   help="number of rows of the tile array")
+
+parser.add_option("--doublel2", default=False,
+  help="add additional row of l2")
+
+parser.add_option("--l2-size", default="128kB",
+  help="size of l2 bank")
+
+parser.add_option("--crossbar_bw", default="16",
+  help="crossbar bandwidth")  
 
 
 (options, args) = parser.parse_args()
 
 # set large mem-size needed for larger problem sizes
-options.mem_size = '1GB'
+options.mem_size = '16GB'
 
 # figure out system size
 n_cpus  = options.num_cpus
 n_xcels = 0 #options.num_xcels
 n_tiles = n_cpus + n_xcels
 
-double_L2 = False
+double_L2 = options.doublel2
+
 
 # mesh size is determined by the number of xcels and device cpus
 #n_cols  = int(math.sqrt(n_tiles))
@@ -394,11 +404,10 @@ n_rows = n_rows_ori + 1
 n_l2s   = n_cols
 
 # add another row if doing 2nd row on edge
-if (double_L2):
+if (double_L2=="True"):
   n_rows += 1
-
-if (double_L2):
   n_l2s += n_cols
+
 
 print("number of cpus: ",n_cpus)
 print("number of rows: ",n_rows)
@@ -449,6 +458,9 @@ if (options.cpu_type == 'DerivO3CPU'):
 
   # make sure stream width matches lsq size
   options.stream_width = CPUClass.LQEntries + CPUClass.SQEntries
+
+elif(options.cpu_type == 'MinorCPU'):
+  CPUClass = CpuConfig.get('MinorCPU')
 else:
   if (options.cpu_type != 'IOCPU'):
     print('WARNING: Only support IOCPU (w or w/o vector) or DerivO3Cpu (w/o vector)')
@@ -465,7 +477,9 @@ else:
     intMulOpLatency = 2,
     divOpLatency    = 20,
     fpAluOpLatency  = 3,
-    fpMulOpLatency  = 3
+    fpMulOpLatency  = 3,
+    numLoadQueueEntries = 16,
+    numStoreQueueEntries = 16
     # , numLoadQueueEntries = 8,
     # numStoreQueueEntries = 8
   )
@@ -523,6 +537,8 @@ network = NetworkClass (ruby_system = system.ruby,
 #n_scratchpads = n_cpus + n_xcels
 n_scratchpads = n_tiles
 scratchpads = []
+#options.spm_size = '4MB'
+print("spm size:",options.spm_size)
 
 for i in xrange(n_scratchpads):
   sp = Scratchpad(version           = i,
@@ -560,7 +576,7 @@ n_icaches = n_cpus
 icache_cntrls = []
 sequencers = []
 for i in xrange(n_icaches):
-  icache = RubyCache(size = '4MB', assoc = 2)
+  icache = RubyCache(size = '4kB', assoc = 2)
   icache_cntrl = L1Cache_Controller(version = i,
                                     L1cache = icache,
                                     transitions_per_cycle = options.ports,
@@ -595,27 +611,29 @@ system.ruby.number_of_virtual_networks = 2
 # L2 cache
 l2_cntrls = []
 
-if n_l2s == 1:
-  l2_size = '1024kB'
-elif n_l2s == 2:
-  l2_size = '512kB'
-elif n_l2s == 4:
-  l2_size = '256kB'
-elif n_l2s == 8:
-  l2_size = '128kB'
-elif n_l2s == 16:
-  l2_size = '64kB'
-elif n_l2s == 32:
-  l2_size = '32kB'
-elif n_l2s % n_cols == 0:
-  l2_size = options.llc_max_size
-else:
-  fatal("Invalid number of L2 banks")
+#if n_l2s == 1:
+#  l2_size = '1024kB'
+#elif n_l2s == 2:
+#  l2_size = '512kB'
+#elif n_l2s == 4:
+#  l2_size = '256kB'
+#elif n_l2s == 8:
+#  l2_size = '128kB'
+#elif n_l2s == 16:
+#  l2_size = '64kB'
+#elif n_l2s == 32:
+#  l2_size = '32kB'
+#elif n_l2s % n_cols == 0:
+#  l2_size = options.llc_max_size
+#else:
+#  fatal("Invalid number of L2 banks")
+
+l2_size = options.l2_size  
 
 
 
 for i in xrange(n_l2s):
-  l2_cache = RubyCache(size = l2_size, assoc = 4)
+  l2_cache = RubyCache(size = l2_size, assoc = 4,block_size = "64B")
   l2_cntrl = L2Cache_Controller(version = i,
                                 cacheMemory = l2_cache,
                                 transitions_per_cycle = 256,
@@ -664,7 +682,7 @@ system.system_port = system.ruby.sys_port_proxy.slave
 
 if (options.vector and options.cpu_type == 'IOCPU'):
   eff_rows = n_rows - 1
-  if (double_L2):
+  if (double_L2=="True"):
     eff_rows = n_rows - 2
   makeSystolicTopology(system, eff_rows, n_cols)
 
@@ -682,11 +700,18 @@ system.mem_ranges = [ AddrRange(options.mem_size) ]
 # eac is 16GB/s so -> 8B/c (@1GHZ). so 16*num_channel = 128B/c
 # HBM_1000_4H_1x64  * 16 (HBMv2)
 # each is 8GB/s, -> 8B/c (@1GHZ). so 8*num_channel B/c
-bytes_per_cycle = options.dram_bw
-print("+++++++++++++++++++++++++++      dram bw is     ++++++++++++++++++++++++++",bytes_per_cycle)
-system.mem_ctrl = HBM_1000_4H_1x64()
-system.mem_ctrl.range = system.mem_ranges[0]
-system.mem_ctrl.channels = 1
+
+bytes_per_cycle = options.crossbar_bw
+#print("+++++++++++++++++++++++++++      dram bw is     ++++++++++++++++++++++++++",bytes_per_cycle)
+#system.mem_ctrl = HBM_1000_4H_1x128()
+#system.mem_ctrl.range = system.mem_ranges[0]
+#system.mem_ctrl.channels = 8
+#system.mem_ctrl.device_size = '1GB'
+
+#system.mem_ctrl = SimpleMemory()
+#system.mem_ctrl.latency = '60ns' 
+#system.mem_ctrl.bandwidth = '32GB/s' # HBM is 128GB/s HBM2 is 256GB/s (1024bit bus...high overhead to route, slower clock than ddr but comparable?)
+#system.mem_ctrl.range = system.mem_ranges[0]
 
 
 #system.mem_ctrl.latency = '60ns' 
@@ -694,15 +719,17 @@ system.mem_ctrl.channels = 1
 #system.mem_ctrl.bandwidth = str(bytes_per_cycle) + 'GB/s' # HBM is 128GB/s HBM2 is 256GB/s (1024bit bus...high overhead to route, slower clock than ddr but comparable?)
 #system.mem_ctrl.range = system.mem_ranges[0]
 
-# num_channels = 2
-# nbr_mem_ctrls = num_channels
-# intlv_size = max(128, system.cache_line_size.value)
-# intlv_bits = int(math.log(nbr_mem_ctrls, 2))
-# mem_ctrls = []
-# for i in range(num_channels):
-#   mc = MemConfig.create_mem_ctrl(HBM_1000_4H_1x128, system.mem_ranges[0], i, nbr_mem_ctrls, intlv_bits, intlv_size)
-#   mem_ctrls.append(mc)
-# system.mem_ctrls = mem_ctrls
+num_channels =16
+nbr_mem_ctrls = num_channels
+intlv_size = max(128, system.cache_line_size.value)
+print("cache line size:",system.cache_line_size.value)
+print("mem_range:",system.mem_ranges[0])
+intlv_bits = int(math.log(nbr_mem_ctrls, 2))
+mem_ctrls = []
+for i in range(num_channels):
+  mc = MemConfig.create_mem_ctrl(HBM_1000_4H_1x64, system.mem_ranges[0], i, nbr_mem_ctrls, intlv_bits, intlv_size)
+  mem_ctrls.append(mc)
+system.mem_ctrls = mem_ctrls
 
 #------------------------------------------------------------------------------
 # Construct a crossbar that connects L2s and mem_ctrl
@@ -720,10 +747,10 @@ system.l2_bus.clk_domain = system.clk_domain
 for i in xrange(n_l2s):
   system.l2_bus.slave = system.l2_cntrls[i].memory
 
-# for i in xrange(nbr_mem_ctrls):
-#   system.l2_bus.master = system.mem_ctrls[i].port
+for i in xrange(nbr_mem_ctrls):
+  system.l2_bus.master = system.mem_ctrls[i].port
 
-system.l2_bus.master = system.mem_ctrl.port
+#system.l2_bus.master = system.mem_ctrl.port
 
 #------------------------------------------------------------------------------
 # Connect memory controller and CPUs to the Ruby system

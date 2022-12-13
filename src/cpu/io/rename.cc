@@ -10,6 +10,8 @@
 #include "cpu/io/cpu.hh"
 #include "debug/Rename.hh"
 
+#include "cpu/io/line_trace.hh"
+
 Rename::Rename(IOCPU* _cpu_p, IOCPUParams* params, size_t in_size, size_t out_size)
     : Stage(_cpu_p, in_size, out_size, StageIdx::RenameIdx, true),
       m_num_threads(params->numThreads),

@@ -20,6 +20,8 @@
 #include "params/IOCPU.hh"
 #include "cpu/io/stage.hh"
 
+#include "cpu/io/line_trace.hh"
+
 class Decode : public Stage
 {
   public:

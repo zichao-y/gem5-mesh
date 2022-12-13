@@ -14,6 +14,9 @@
 #include "debug/Mesh.hh"
 #include "debug/RiscvVector.hh"
 #include "debug/Frame.hh"
+#include "debug/Barrier.hh"
+
+#include "cpu/io/line_trace.hh"
 
 //-----------------------------------------------------------------------------
 // IEW
@@ -37,7 +40,7 @@ IEW::IEW(IOCPU* _cpu_p, IOCPUParams* params, size_t in_size, size_t out_size)
                                                params->intAluOpLatency));
   m_op_to_unit_map[Enums::IntAlu]     = idx;
   m_op_to_unit_map[Enums::No_OpClass] = idx;
-  m_traced_exec_units.push_back(m_exec_units.back());
+  //m_traced_exec_units.push_back(m_exec_units.back());
 
   // create Int Mul exec unit
   idx++;
@@ -416,6 +419,9 @@ IEW::doIssue()
     if (inst->isMemBarrier() && (m_robs[tid]->getMemInstCount() > 0 || m_mem_unit_p->getNumOutstandingAcks() > 0)) {
       DPRINTF(IEW, "[sn:%d] Can't issue mem barrier due to pending younger "
                    "memory instructions\n", inst->seq_num);
+      DPRINTF(Barrier, "[sn:%d] Can't issue mem barrier due to pending younger "
+                   "memory instructions, %d exist in ROB, %d outstanding acks\n", inst->seq_num,m_robs[tid]->getMemInstCount(),m_mem_unit_p->getNumOutstandingAcks());
+      
 #ifdef DEBUG
       // record
       m_stage_status.set(IEWStatus::IssueInitStall);
@@ -458,6 +464,10 @@ IEW::doIssue()
           m_cpi_stack.setEventThisCycle(CPIStackInterace::CPIEvents::Stallon_Frame);
           DPRINTF(Mesh, "[sn:%d] Can't issue frame start because not enough tokens %d\n", inst->seq_num, reqCnt);
         }
+#ifdef DEBUG
+        // record
+        m_stage_status.set(IEWStatus::IssueStallonFrame);
+#endif
         // stall inst
         return;
       }
@@ -571,6 +581,10 @@ IEW::doIssue()
       m_cpi_stack.setEventThisCycle(CPIStackInterace::CPIEvents::Stallon_INET_Pull);
     else
       m_cpi_stack.setEventThisCycle(CPIStackInterace::CPIEvents::Stallon_Fetch);
+#ifdef DEBUG
+      // record
+      m_stage_status.set(IEWStatus::IssueStallonFetch);
+#endif  
   }
   
 }
@@ -679,13 +693,17 @@ IEW::linetrace(std::stringstream& ss)
   if (m_stage_status[IEWStatus::IssueSquashed]) {
     s += "x";
   } else if (m_stage_status[IEWStatus::IssueInitStall]) {
-    s += "^#";
+    s += "#";
+  }else if (m_stage_status[IEWStatus::IssueStallonFetch]) {
+    s += "^";
+  }else if (m_stage_status[IEWStatus::IssueStallonFrame]) {
+    s += "&";
   } else if (m_stage_status[IEWStatus::IssueBusy]) {
     assert(!m_issued_insts.empty());
     for (auto inst : m_issued_insts)
-      s += inst->toString() + " ";
+      s += inst->toString(true) + " ";
   }
-  ss << std::setw(30) << std::left << s;
+  ss << std::setw(50) << std::left << s;
 
   // Execute stage
   for (auto unit_p : m_traced_exec_units)

@@ -9,6 +9,8 @@
 
 #include "debug/IEW.hh"
 
+#include "cpu/io/line_trace.hh"
+
 PipelinedExecUnit::PipelinedExecUnit(const char* _iew_name, const char* _name,
                                      size_t num_stages)
     : m_iew_name(_iew_name),

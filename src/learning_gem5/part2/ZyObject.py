@@ -1,6 +1,5 @@
-# -*- mode:python -*-
-
-# Copyright (c) 2009 The Hewlett-Packard Development Company
+# -*- coding: utf-8 -*-
+# Copyright (c) 2017 Jason Lowe-Power
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,18 +25,31 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# Authors: Nathan Binkert
+# Authors: Jason Lowe-Power
 
-Import('*')
+from m5.params import *
+from m5.SimObject import SimObject
 
-if env['PROTOCOL'] == 'None':
-    Return()
 
-SimObject('Controller.py')
+class ZyObject(SimObject):
+    type = 'ZyObject'
+    cxx_header = "learning_gem5/part2/zy_object.hh"
 
-Source('AbstractController.cc')
-Source('AbstractEntry.cc')
-Source('AbstractCacheEntry.cc')
-Source('RubyRequest.cc')
+    time_to_wait = Param.Latency("Time before firing the event")
+    number_of_fires = Param.Int(1,"Number of times to fire the event before"
+                                  "goodbye")
+    
+    touch_object = Param.TouchObject("A touch object")
 
-DebugFlag('Addrbug')
+
+class TouchObject(SimObject):
+    type = 'TouchObject'
+    cxx_header = "learning_gem5/touch_object.hh"
+
+    buffer_size = Param.MemorySize('1kB',
+                                   "Size of buffer to fill with goodbye")
+    write_bandwidth = Param.MemoryBandwidth('100MB/s', "Bandwidth to fill "
+                                            "the buffer")
+
+
+    

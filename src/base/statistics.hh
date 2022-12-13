@@ -71,6 +71,8 @@
 #include "base/intmath.hh"
 #include "base/str.hh"
 #include "base/types.hh"
+#include "base/trace.hh"
+
 
 class Callback;
 
@@ -1130,7 +1132,11 @@ class VectorBase : public DataWrapVec<Derived, VectorInfoProxy>
     Proxy
     operator[](off_type index)
     {
-        //printf("index: %d, size: %d, 1133",index,size());
+        //std::string str = __builtin_FILE();
+        //std::cout << "Idx [] called by " << str <<  __builtin_LINE() << std::endl;
+        //std::cout << "index to be accessed: " << index << "size of index:" << size() << "for variable:" <<this->name() << std::endl;
+        //sprintf("[] Called by %s",__builtin_FUNCTION());
+        //DPRINTF(Idxbug, "[] called by: %s", __builtin_FUNCTION());
         assert (index >= 0 && index < size());
         return Proxy(this->self(), index);
     }

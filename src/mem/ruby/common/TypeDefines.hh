@@ -33,5 +33,6 @@
 typedef unsigned int LinkID;
 typedef unsigned int NodeID;
 typedef unsigned int SwitchID;
+typedef unsigned int AInt;
 
 #endif //__MEM_RUBY_COMMON_TYPEDEFINES_HH__

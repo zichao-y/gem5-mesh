@@ -18,6 +18,8 @@
 #include "mem/request.hh"
 #include "params/IOCPU.hh"
 
+#include "cpu/io/line_trace.hh"
+
 /**
  * This models a pipelined memory unit consisting of three stages
  *    - Address calculation   (S0)
@@ -136,8 +138,11 @@ class MemUnit : public ExecUnit
     enum Status {
       Squashed,
       S0_Stalled,       // addr calc stage is stalled
-      S1_Stalled,       // addr translation stage is stalled
-      S2_Stalled,       // inst issue stage is stalled
+      S1_Stalled_lq,       // addr translation stage is stalled
+      S1_Stalled_sq,       // inst issue stage is stalled
+      S2_Stalled_cache,    // inst stall in s2 due to dcache busy
+      S2_Stalled_dep,      // inst stall in s2 due to ld-st queue dependency
+      S2_Stalled_rob,      // inst stall in s2 due to st instruction not reach rob head
       S0_Busy,
       S1_Busy,
       S2_Busy,
@@ -231,8 +236,14 @@ class MemUnit : public ExecUnit
     Stats::Scalar m_vertical_prefetches;
     Stats::Scalar m_horizontal_prefetches;
     Stats::Scalar m_scalar_prefetches;
+#ifdef DEBUG    
+    Stats::Scalar m_s0stall;
+    Stats::Scalar m_s1stall_lq;
+    Stats::Scalar m_s1stall_sq;
+    Stats::Scalar m_s2stall_cache;
+    Stats::Scalar m_s2stall_dep;
+    Stats::Scalar m_s2stall_rob;
 
-#ifdef DEBUG
     /** Unit's status */
     std::bitset<Status::NumStatus> m_status;
 
@@ -240,6 +251,8 @@ class MemUnit : public ExecUnit
     IODynInstPtr m_addr_calculated_inst;
     IODynInstPtr m_translated_inst;
     std::vector<IODynInstPtr> m_issued_insts;
+    std::vector<IODynInstPtr> m_stalled_dep_insts;
+    IODynInstPtr m_stalled_rob_inst;
 #endif
 };
 

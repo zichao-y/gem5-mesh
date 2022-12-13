@@ -23,3 +23,6 @@ if 'IOCPU' in env['CPU_MODELS']:
   Source('pipeline.cc')
 
   DebugFlag('IOCPU')
+  DebugFlag('Barrier')
+  DebugFlag('LineTrace')
+  DebugFlag('SpgeMM')

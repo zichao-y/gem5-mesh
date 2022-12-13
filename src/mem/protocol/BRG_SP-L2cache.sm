@@ -257,7 +257,9 @@ machine(MachineType:L2Cache, "SP LLC cache")
       Addr lineAddress, int vecDimX, int vecDimY, int countPerCore, int config
       ) {
     int uint32_size := 4;
+    DPRINTF(Addrbug, "addressToInt line 260. wordAddress: %#x, lineAddress: %#x\n", wordAddress, lineAddress);
     int maxResps := (addressToInt(wordAddress) - addressToInt(lineAddress)) / uint32_size;
+    //int maxResps := (wordAddress - lineAddress) / uint32_size;
 
     // total
     int maxCores := 0;
@@ -362,31 +364,45 @@ machine(MachineType:L2Cache, "SP LLC cache")
 
   // get the memory address we want to send
   int getWordIdx(Addr lineAddress, Addr wordAddress, bool isCpuSide) {
-      int wordAddr := addressToInt(wordAddress); // cast to int so can subtract
-      int lineAddr := addressToInt(lineAddress);
+
+      DPRINTF(Addrbug, "addressToInt line 367. wordAddress: %#x, lineAddress: %#x\n", wordAddress, lineAddress);
+      //Aint wordAddr := addressToInt(wordAddress); // cast to int so can subtract
+      //Aint lineAddr := addressToInt(lineAddress);
       
       // get the count we want to use depending on which port in progress
       int vecCnt := getPortVecCnt(isCpuSide);
 
       // get offset IN WORDS, need to divide by word size
       int uint32_t_size := 4;
-      int wordOffset := ((wordAddr - lineAddr) / uint32_t_size) + vecCnt;
+      int wordOffset := ((addressToInt(wordAddress) - addressToInt(lineAddress)) / uint32_t_size) + vecCnt;
       return wordOffset;
   }
 
   // get the scratchpad address to send the response to
   Addr getSpadIdx(Addr baseSpadAddr, int coreToServer, int subCoreOffset, 
       int countPerCore, bool isCpuSide) {
-    int spadIdx := addressToInt(baseSpadAddr) + (coreToServer << 12);
+    DPRINTF(Addrbug, "addressToInt line 383. baseSpadAddress: %#x\n", baseSpadAddr); 
 
+
+    
     // get the count we want to use depending on which port in progress
     int vecCnt := getPortVecCnt(isCpuSide);
 
     // move up count
     int uint32_t_size := 4;
     int spadOffset := mod((subCoreOffset + vecCnt), countPerCore);
-    spadIdx := spadIdx + (spadOffset * uint32_t_size);
-    return intToAddress(spadIdx);
+
+    //use an external funtion to aviod type conversion
+    //uint64_t spadIdx := addressToInt(baseSpadAddr) + (uint64_t)(coreToServer << 12);
+    //spadIdx := spadIdx + (spadOffset * uint32_t_size);
+    int offset := spadOffset * uint32_t_size;
+
+    Addr spadIdx := Addr_cal(baseSpadAddr,coreToServer,offset);
+
+    DPRINTF(Addrbug, "getSpadIdx parameters: baseSpadAddr: %#x, coreToServer: %d, subCoreOffset: %d, countPerCore: %d, isCpuSide: %d\n",baseSpadAddr,coreToServer,subCoreOffset,countPerCore,isCpuSide);
+    DPRINTF(Addrbug, "getSpadIdx result: vecCnt: %d, spadOffset: %d, spadIdx: %d\n",vecCnt,spadOffset,spadIdx);
+    //return intToAddress(spadIdx);
+    return spadIdx;
   }
 
   int min(int a, int b) {
@@ -765,6 +781,7 @@ machine(MachineType:L2Cache, "SP LLC cache")
         respType := LLCResponseType:REDATA;
         baseCntAddr := in_msg.WordAddress;
       }
+      DPRINTF(Addrbug,"PrefetchAddress is %#x, WordAddress is %#x\n",in_msg.PrefetchAddress,in_msg.WordAddress);
 
       // because this mimics a remote store, the return address should be
       // the storage address in the spad

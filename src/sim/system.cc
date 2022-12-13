@@ -466,7 +466,7 @@ System::regStats()
     ;
 
     m_spad_l2_bank_util
-        .init(16)
+        .init(32)
         .name(name() + ".spad_l2_util")
     ;
     // avgPrefetchLatency

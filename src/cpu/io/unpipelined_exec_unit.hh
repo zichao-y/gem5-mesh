@@ -11,6 +11,8 @@
 
 #include "cpu/io/exec_unit.hh"
 
+#include "cpu/io/line_trace.hh"
+
 class UnpipelinedExecUnit : public ExecUnit
 {
   public:

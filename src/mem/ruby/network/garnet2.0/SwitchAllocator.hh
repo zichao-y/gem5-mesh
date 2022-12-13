@@ -40,6 +40,18 @@
 #include "mem/ruby/common/Consumer.hh"
 #include "mem/ruby/network/garnet2.0/CommonTypes.hh"
 
+typedef enum {
+  ROUND_ROBIN = 0,
+  RL,
+  GLOBAL_AGE,
+  LOGIC,
+  LOCAL_AGE,
+  TREE
+} ArbitrationAlg;
+const int invalid_choice = -1;
+const float global_age_norm_factor = 500.0f;
+const float rand_ratio = 0.0f;
+
 class Router;
 class InputUnit;
 class OutputUnit;
@@ -56,6 +68,7 @@ class SwitchAllocator : public Consumer
     void print(std::ostream& out) const {};
     void arbitrate_inports();
     void arbitrate_outports();
+    void unified_arbitrate();
     bool send_allowed(int inport, int invc, int outport, int outvc);
     int vc_allocate(int outport, int inport, int invc);
 
@@ -71,10 +84,21 @@ class SwitchAllocator : public Consumer
     }
 
     void resetStats();
+    // Check for trivial cases to reduce the number of useless samples
+    bool check_trivial_cases(
+      const std::vector<bool>& useful_for_this_port,
+      int& winner);
+    int choose_best_result(
+      const std::vector<float>& scores,
+      const std::vector<bool>& useful,
+      std::vector<bool>& inport_used);
+    // send flits to output ports based on the arbitration result
+    void arbitrate_outports_with_winners(const std::vector<int>& output_port_winners);
 
   private:
     int m_num_inports, m_num_outports;
     int m_num_vcs, m_vc_per_vnet;
+    ArbitrationAlg alg;
 
     double m_input_arbiter_activity, m_output_arbiter_activity;
 
